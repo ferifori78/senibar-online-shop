@@ -1,0 +1,253 @@
+# ==========================================================================
+# Senobar — full stack
+#
+#   web      Vue 3 built by Vite, served by Nginx
+#   api      Django REST Framework under Gunicorn
+#   worker   Celery worker — notifications and reports
+#   beat     Celery Beat — the 08:00 roast report and the nightly sweeps
+#   db       PostgreSQL
+#   redis    broker and result backend
+#
+# This server already runs `nimso_nginx`, which holds host ports 80 and 443
+# and fronts bot.nimso.xyz. Senobar does NOT publish a host port: it joins
+# that gateway's Docker network, and nimso_nginx reaches it by container name
+# the way its other server blocks do.
+#
+#   docker compose up -d --build
+# ==========================================================================
+
+name: senobar
+
+x-api-env: &api-env
+  DEBUG: ${DEBUG:-False}
+  SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set}
+  ALLOWED_HOSTS: ${ALLOWED_HOSTS:-localhost,127.0.0.1,api}
+  DATABASE_URL: postgres://${POSTGRES_USER:-senobar}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@db:5432/${POSTGRES_DB:-senobar}
+  REDIS_URL: redis://redis:6379/0
+  CELERY_BROKER_URL: redis://redis:6379/0
+  CELERY_RESULT_BACKEND: redis://redis:6379/1
+  CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-https://senobar.shop}
+  CSRF_TRUSTED_ORIGINS: ${CSRF_TRUSTED_ORIGINS:-https://senobar.shop}
+  FRONTEND_URL: ${FRONTEND_URL:-https://senobar.shop}
+  SECURE_SSL_REDIRECT: ${SECURE_SSL_REDIRECT:-False}
+  SECURE_HSTS_SECONDS: ${SECURE_HSTS_SECONDS:-0}
+  PAYMENT_GATEWAY: ${PAYMENT_GATEWAY:-mock}
+  PAYMENT_GATEWAYS: ${PAYMENT_GATEWAYS:-mock}
+  PAYMENT_CALLBACK_URL: ${PAYMENT_CALLBACK_URL:-}
+  ZARINPAL_MERCHANT_ID: ${ZARINPAL_MERCHANT_ID:-}
+  ZARINPAL_ACCESS_TOKEN: ${ZARINPAL_ACCESS_TOKEN:-}
+  ZARINPAL_SANDBOX: ${ZARINPAL_SANDBOX:-False}
+  BITPAY_API_KEY: ${BITPAY_API_KEY:-}
+  BITPAY_SANDBOX: ${BITPAY_SANDBOX:-False}
+  BITPAY_FEE_PERCENT: ${BITPAY_FEE_PERCENT:-1.0}
+  BITPAY_FEE_CAP: ${BITPAY_FEE_CAP:-50000}
+  MAX_IMAGE_UPLOAD_BYTES: ${MAX_IMAGE_UPLOAD_BYTES:-26214400}
+  IMAGE_SHRINK_ENABLED: ${IMAGE_SHRINK_ENABLED:-True}
+  # Telegram activity feed. The bot token belongs in .env on the server:
+  # anyone holding it can post as the shop.
+  TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+  TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+  TELEGRAM_TIMEOUT: ${TELEGRAM_TIMEOUT:-8.0}
+  TELEGRAM_DIGEST_MINUTES: ${TELEGRAM_DIGEST_MINUTES:-60}
+  TELEGRAM_TRENDING_VIEWS: ${TELEGRAM_TRENDING_VIEWS:-25}
+  SITE_VISIT_RETENTION_DAYS: ${SITE_VISIT_RETENTION_DAYS:-7}
+  VISIT_IP_RATE: ${VISIT_IP_RATE:-600/hour}
+  SMS_BACKEND: ${SMS_BACKEND:-console}
+  SMS_SENDER: ${SMS_SENDER:-Senobar}
+  KAVENEGAR_API_KEY: ${KAVENEGAR_API_KEY:-}
+  # This block is an allowlist: a variable absent here never reaches the
+  # container however it is set in .env. Every SMSIR_* setting the code reads
+  # has to be named, or the driver silently runs unconfigured.
+  SMSIR_API_KEY: ${SMSIR_API_KEY:-}
+  SMSIR_LINE_NUMBER: ${SMSIR_LINE_NUMBER:-}
+  SMSIR_TIMEOUT: ${SMSIR_TIMEOUT:-8.0}
+  SMSIR_VERIFY_TEMPLATE_ID: ${SMSIR_VERIFY_TEMPLATE_ID:-}
+  SMSIR_VERIFY_PARAM: ${SMSIR_VERIFY_PARAM:-CODE}
+  SMSIR_WELCOME_TEMPLATE_ID: ${SMSIR_WELCOME_TEMPLATE_ID:-}
+  SMSIR_WELCOME_PARAM: ${SMSIR_WELCOME_PARAM:-CONTACT}
+  SMSIR_ORDER_TEMPLATE_ID: ${SMSIR_ORDER_TEMPLATE_ID:-}
+  SMSIR_ORDER_PARAM: ${SMSIR_ORDER_PARAM:-ORDER_STATUS}
+  SMSIR_ORDER_CODE_PARAM: ${SMSIR_ORDER_CODE_PARAM:-ORDER_CODE}
+  SMSIR_PAYMENT_TEMPLATE_ID: ${SMSIR_PAYMENT_TEMPLATE_ID:-}
+  SMSIR_TICKET_REPLY_TEMPLATE_ID: ${SMSIR_TICKET_REPLY_TEMPLATE_ID:-}
+  SMSIR_TICKET_CODE_PARAM: ${SMSIR_TICKET_CODE_PARAM:-TICKET_CODE}
+  SMSIR_TICKET_STATUS_TEMPLATE_ID: ${SMSIR_TICKET_STATUS_TEMPLATE_ID:-}
+  SMSIR_TICKET_STATUS_PARAM: ${SMSIR_TICKET_STATUS_PARAM:-TICKET_STATUS}
+  OTP_CODE_LENGTH: ${OTP_CODE_LENGTH:-5}
+  OTP_TTL_SECONDS: ${OTP_TTL_SECONDS:-120}
+  OTP_MAX_PER_HOUR: ${OTP_MAX_PER_HOUR:-5}
+  OTP_MAX_ATTEMPTS: ${OTP_MAX_ATTEMPTS:-5}
+  OTP_RESEND_SECONDS: ${OTP_RESEND_SECONDS:-60}
+  OTP_IP_RATE: ${OTP_IP_RATE:-20/hour}
+  EMAIL_BACKEND: ${EMAIL_BACKEND:-django.core.mail.backends.console.EmailBackend}
+  EMAIL_HOST: ${EMAIL_HOST:-}
+  EMAIL_PORT: ${EMAIL_PORT:-587}
+  EMAIL_HOST_USER: ${EMAIL_HOST_USER:-}
+  EMAIL_HOST_PASSWORD: ${EMAIL_HOST_PASSWORD:-}
+  EMAIL_USE_TLS: ${EMAIL_USE_TLS:-True}
+  DEFAULT_FROM_EMAIL: ${DEFAULT_FROM_EMAIL:-Senobar <hello@senobar.shop>}
+  ROASTERY_REPORT_EMAILS: ${ROASTERY_REPORT_EMAILS:-roastery@senobar.shop}
+
+# The API, worker and beat run the same image with the same environment;
+# only the command differs.
+x-api-base: &api-base
+  build:
+    context: ./backend
+    dockerfile: Dockerfile
+  image: senobar-api:latest
+  environment: *api-env
+  volumes:
+    - media:/app/media
+    - static:/app/staticfiles
+  depends_on:
+    db:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+  restart: unless-stopped
+
+services:
+  # --- Data ---------------------------------------------------------------
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-senobar}
+      POSTGRES_USER: ${POSTGRES_USER:-senobar}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-senobar} -d ${POSTGRES_DB:-senobar}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    # Not published: only the compose network reaches Postgres.
+
+  redis:
+    image: redis:7-alpine
+    # Persist the queue so a restart does not drop unstarted tasks.
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy noeviction
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  # --- Application --------------------------------------------------------
+  # Runs migrations and collectstatic once, then exits. Everything else waits
+  # for it, so two API replicas never migrate concurrently.
+  migrate:
+    <<: *api-base
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput"
+    restart: "no"
+
+  api:
+    <<: *api-base
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      # Reaches itself as `localhost`, which is why settings.py always keeps
+      # localhost in ALLOWED_HOSTS — otherwise every probe is a 400 and the
+      # container never turns healthy.
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/health/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  worker:
+    <<: *api-base
+    command: >
+      celery -A config worker
+      --loglevel=info
+      --concurrency=${CELERY_CONCURRENCY:-4}
+      --queues=default,notifications,reports
+      --max-tasks-per-child=200
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A config inspect ping -d celery@$$HOSTNAME || exit 1"]
+      interval: 60s
+      timeout: 15s
+      retries: 3
+      start_period: 40s
+
+  beat:
+    <<: *api-base
+    # The schedule lives in the database, so Beat needs migrations to have run.
+    command: >
+      celery -A config beat
+      --loglevel=info
+      --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    depends_on:
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  # --- Edge ---------------------------------------------------------------
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Same origin: nimso_nginx proxies everything under senobar.shop to
+        # this container, so the browser never makes a cross-origin request.
+        VITE_API_URL: /api
+    image: senobar-web:latest
+    # No host port. nimso_nginx sits on the `gateway` network below and
+    # reaches this container by name — publishing a port would also let
+    # anyone hit the site by server IP and bypass Cloudflare.
+    expose:
+      - "80"
+    networks:
+      - default
+      - gateway
+    volumes:
+      # Read-only: Nginx serves Django's static and media files directly.
+      - static:/app/staticfiles:ro
+      - media:/app/media:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  media:
+  static:
+
+networks:
+  # Senobar's own private network: db, redis, api, worker, beat, web.
+  default:
+
+  # The existing gateway's network, created by the nimso-bot stack. Only
+  # `web` joins it, so Postgres and Redis stay unreachable from there.
+  #
+  # VERIFY THE NAME before bringing this up:
+  #   docker network inspect proxy --format '{{range .Containers}}{{.Name}}{{"\n"}}{{end}}'
+  # If nimso_nginx is not listed, change `name:` to nimso-bot_nimso_network.
+  gateway:
+    external: true
+    name: proxy

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- e-Namad site ownership verification. Must stay in the served HTML. -->
+    <meta name="enamad" content="56699141" />
+
+    <!-- The fir mark. Two variants so the glyph never sits on a near-invisible
+         square in the opposite browser theme. -->
+    <!-- Tab icons carry a simplified leaf silhouette, not the full mark: the
+         calligraphy and lateral veins close up into a smudge at 16px. The
+         home-screen icons below have the room for the real artwork. -->
+    <!-- The .ico comes first as the baseline; the two below override it where
+         `media` is understood. Ordering it last would let it win over them. -->
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="icon" type="image/png" sizes="64x64" href="/favicon-64.png" media="(prefers-color-scheme: light)" />
+    <link rel="icon" type="image/png" sizes="64x64" href="/favicon-dark-64.png" media="(prefers-color-scheme: dark)" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <meta name="theme-color" content="#f4f1ea" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#1c1c1a" media="(prefers-color-scheme: dark)" />
+
+    <!-- TEMPORARY: e-Namad title verification. Revert to
+         `صنوبر — قهوه تخصصی` once the badge is issued. -->
+    <title>صنوبر — قهوه تخصصی</title>
+    <meta name="description" content="صنوبر — فروش قهوه تخصصی، تازه رست‌شده. هر لات پس از سفارش رست می‌شود." />
+
+    <!-- Link previews in messengers, where most of this shop will be shared. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="صنوبر" />
+    <meta property="og:title" content="صنوبر — قهوه تخصصی" />
+    <meta property="og:description" content="لات‌های تک‌مبدأ در بچ‌های کوچک. تاریخ رست روی هر بسته ثبت است." />
+    <meta property="og:locale" content="fa_IR" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

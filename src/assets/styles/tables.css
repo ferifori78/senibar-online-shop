@@ -1,0 +1,97 @@
+/* ==========================================================================
+   Dense table — responsive collapse
+   Imported by globals.css, so the admin views share one implementation.
+
+   Above 56rem: a real table, as dense as the Terminal register wants.
+   Below:      each row becomes a stacked card, and every cell prints its own
+               column name from `data-label`. The header row is hidden.
+
+   A horizontally scrolling table is technically usable on a phone and
+   miserable in practice — an operator checking an order on the shop floor
+   should not have to swipe sideways to find the status column.
+   ========================================================================== */
+
+@media (max-width: 56rem) {
+  .tbl-responsive thead {
+    /* Hidden visually; screen readers get the labels from data-label instead. */
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .tbl-responsive,
+  .tbl-responsive tbody,
+  .tbl-responsive tr,
+  .tbl-responsive td {
+    display: block;
+    width: 100%;
+  }
+
+  .tbl-responsive tr {
+    border: 2px solid var(--terminal-rule);
+    margin-bottom: 0.75rem;
+    padding: 0.5rem 0.625rem;
+    white-space: normal;
+  }
+
+  /* The row that opened an order keeps its raised ground. */
+  .tbl-responsive tr.tbl__row--head {
+    border-color: var(--terminal-text);
+  }
+
+  .tbl-responsive td {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0.3125rem 0;
+    border-bottom: 1px solid var(--terminal-rule);
+    text-align: start;
+  }
+
+  .tbl-responsive td:last-child {
+    border-bottom: 0;
+  }
+
+  /* The column name, printed as a label on each cell. */
+  .tbl-responsive td[data-label]::before {
+    content: attr(data-label);
+    font-family: var(--font-terminal);
+    font-size: 0.5rem;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--terminal-dim);
+    flex: none;
+  }
+
+  /* An empty cell would otherwise render as a stray label with nothing after
+     it — the continuation rows of a multi-line order do exactly that. */
+  .tbl-responsive td:empty {
+    display: none;
+  }
+
+  /* Numbers stop being right-aligned once they sit beside their own label. */
+  .tbl-responsive td.tbl__num {
+    text-align: start;
+  }
+
+  /* Full-width cells: the loading and empty states span every column. */
+  .tbl-responsive td.tbl__state,
+  .tbl-responsive td.tbl__msg {
+    display: block;
+    border-bottom: 0;
+  }
+
+  .tbl-responsive td.tbl__state::before,
+  .tbl-responsive td.tbl__msg::before {
+    content: none;
+  }
+
+  .tbl-responsive td.tbl__actions {
+    justify-content: flex-start;
+    padding-top: 0.625rem;
+  }
+}
